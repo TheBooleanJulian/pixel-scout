@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' https://fonts.googleapis.com https://fonts.gstatic.com; media-src *;">
+<title>Pixel Scout</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Syne:wght@600;700&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 288px;
+  background: transparent;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+.panel {
+  width: 288px;
+  background: rgba(10, 10, 12, 0.96);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 14px;
+  overflow: hidden;
+  font-family: 'JetBrains Mono', monospace;
+  color: #e4e4e7;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* ── Title bar ─────────────────────────────── */
+.titlebar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  background: rgba(15,15,17,0.98);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  -webkit-app-region: drag;
+  cursor: grab;
+}
+.titlebar:active { cursor: grabbing; }
+
+.tb-logo {
+  width: 18px; height: 18px;
+  border: 1.5px solid #00d4c8;
+  border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+.tb-logo::after {
+  content: '';
+  width: 5px; height: 5px;
+  background: #00d4c8;
+  border-radius: 50%;
+}
+
+.tb-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #a1a1aa;
+  flex: 1;
+  -webkit-app-region: no-drag;
+}
+
+.tb-btns {
+  display: flex;
+  gap: 4px;
+  -webkit-app-region: no-drag;
+}
+
+.tb-btn {
+  width: 22px; height: 22px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 5px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px;
+  color: #a1a1aa;
+  transition: all 0.15s;
+  font-family: 'JetBrains Mono', monospace;
+}
+.tb-btn:hover { background: rgba(255,255,255,0.09); color: #a1a1aa; }
+.tb-btn.active { background: rgba(0,212,200,0.12); color: #00d4c8; border-color: rgba(0,212,200,0.3); }
+.tb-btn.pinned-momentary { background: rgba(250,204,21,0.15); color: #facc15; border-color: rgba(250,204,21,0.4); }
+.tb-btn.close:hover { background: rgba(239,68,68,0.15); color: #ef4444; border-color: rgba(239,68,68,0.3); }
+
+/* ── Zoom area ─────────────────────────────── */
+.zoom-wrap {
+  position: relative;
+  background: #000;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  height: 150px;
+  overflow: hidden;
+}
+#zoom-canvas {
+  display: block;
+  width: 288px;
+  height: 150px;
+  image-rendering: pixelated;
+}
+.crosshair {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  width: 1px; height: 1px;
+}
+.crosshair::before, .crosshair::after {
+  content: '';
+  position: absolute;
+  background: rgba(0,212,200,0.7);
+}
+.crosshair::before { width: 1px; height: 14px; top: -7px; left: 0; }
+.crosshair::after  { width: 14px; height: 1px; left: -7px; top: 0; }
+
+.zoom-tag {
+  position: absolute;
+  top: 6px; left: 8px;
+  font-size: 9px;
+  color: rgba(255,255,255,0.5);
+  letter-spacing: 1px;
+  pointer-events: none;
+}
+.zoom-coords {
+  position: absolute;
+  top: 6px; right: 8px;
+  font-size: 9px;
+  color: rgba(255,255,255,0.5);
+  letter-spacing: 0.3px;
+  pointer-events: none;
+}
+
+/* pixel outline at center */
+.center-px {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  border: 1px solid rgba(0,212,200,0.5);
+}
+
+/* ── Swatch + Hex ───────────────────────────── */
+.swatch-row {
+  display: flex;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  height: 52px;
+}
+#color-swatch {
+  width: 52px;
+  background: #ff0000;
+  cursor: pointer;
+  flex-shrink: 0;
+  position: relative;
+  transition: filter 0.1s;
+}
+#color-swatch:hover { filter: brightness(1.15); }
+#color-swatch::after {
+  content: 'COPY';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 7px; letter-spacing: 1.5px;
+  color: rgba(0,0,0,0.5);
+  font-weight: 600;
+}
+.hex-block {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 12px;
+  gap: 2px;
+}
+.hex-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: #ffffff;
+  letter-spacing: 1.5px;
+}
+.hex-value .prefix { color: #52525b; font-weight: 400; }
+.hex-sub {
+  font-size: 9px;
+  color: #52525b;
+  letter-spacing: 0.5px;
+}
+
+/* ── Channel bars ───────────────────────────── */
+.channels {
+  padding: 10px 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.ch-row { display: flex; align-items: center; gap: 7px; }
+.ch-lbl { font-size: 9px; color: #c4c4c7; width: 9px; text-align: right; }
+.ch-track {
+  flex: 1;
+  height: 3px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.ch-fill { height: 100%; border-radius: 2px; width: 0%; transition: width 0.04s linear; }
+.ch-fill.r { background: #ef4444; }
+.ch-fill.g { background: #22c55e; }
+.ch-fill.b { background: #3b82f6; }
+.ch-fill.w { background: #71717a; }
+.ch-num { font-size: 10px; color: #e4e4e7; width: 26px; text-align: right; }
+
+/* ── Values grid ───────────────────────────── */
+.vals-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 1px;
+  background: rgba(255,255,255,0.04);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.val-cell {
+  background: rgba(10, 10, 12, 0.98);
+  padding: 8px 10px;
+}
+.vc-label { font-size: 8px; color: #a1a1aa; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 3px; }
+.vc-num { font-size: 13px; font-weight: 500; color: #e4e4e7; }
+.vc-num.accent { color: #00d4c8; }
+
+/* ── History ───────────────────────────────── */
+.history {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  min-height: 34px;
+  flex-wrap: wrap;
+}
+.hist-chip {
+  width: 18px; height: 18px;
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,0.1);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.1s;
+}
+.hist-chip:hover { transform: scale(1.25); }
+.hist-empty { font-size: 9px; color: #71717a; letter-spacing: 0.3px; }
+
+/* ── Status bar ────────────────────────────── */
+.statusbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+}
+.hsl-text { font-size: 9px; color: #c4c4c7; letter-spacing: 0.3px; }
+.status-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: #00d4c8;
+  box-shadow: 0 0 4px rgba(0,212,200,0.6);
+  animation: blink 2s ease-in-out infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+/* ── Loading/init ───────────────────────────── */
+#init-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(10,10,12,0.97);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  z-index: 99;
+  border-radius: 14px;
+}
+.init-spinner {
+  width: 28px; height: 28px;
+  border: 2px solid rgba(0,212,200,0.2);
+  border-top-color: #00d4c8;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.init-text { font-size: 10px; color: #52525b; letter-spacing: 1px; }
+
+/* ── Toast ─────────────────────────────────── */
+#toast {
+  position: fixed;
+  bottom: 8px; left: 50%;
+  transform: translateX(-50%) translateY(10px);
+  background: #00d4c8;
+  color: #000;
+  font-size: 10px; font-weight: 600;
+  letter-spacing: 1px;
+  padding: 5px 14px;
+  border-radius: 20px;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+<div class="panel" id="panel">
+
+  <!-- Init overlay -->
+  <div id="init-overlay">
+    <div class="init-spinner"></div>
+    <div class="init-text">STARTING CAPTURE…</div>
+  </div>
+
+  <!-- Title bar -->
+  <div class="titlebar">
+    <div class="tb-logo"></div>
+    <span class="tb-title">PixelScout</span>
+    <div class="tb-btns">
+      <button class="tb-btn active" id="btn-follow" title="Follow cursor">⊕</button>
+      <button class="tb-btn close" id="btn-close" title="Quit">✕</button>
+    </div>
+  </div>
+
+  <!-- Zoom canvas -->
+  <div class="zoom-wrap">
+    <canvas id="zoom-canvas" width="288" height="150"></canvas>
+    <div class="crosshair"></div>
+    <div class="center-px" id="center-px"></div>
+    <span class="zoom-tag">10× ZOOM</span>
+    <span class="zoom-coords" id="coords-label">–</span>
+  </div>
+
+  <!-- Swatch + Hex -->
+  <div class="swatch-row">
+    <div id="color-swatch" title="Click to copy hex"></div>
+    <div class="hex-block">
+      <div class="hex-value"><span class="prefix">#</span><span id="hex-val">------</span></div>
+      <div class="hex-sub">click swatch · click screen to pin</div>
+    </div>
+  </div>
+
+  <!-- Channel bars -->
+  <div class="channels">
+    <div class="ch-row">
+      <span class="ch-lbl">R</span>
+      <div class="ch-track"><div class="ch-fill r" id="fill-r"></div></div>
+      <span class="ch-num" id="num-r">–</span>
+    </div>
+    <div class="ch-row">
+      <span class="ch-lbl">G</span>
+      <div class="ch-track"><div class="ch-fill g" id="fill-g"></div></div>
+      <span class="ch-num" id="num-g">–</span>
+    </div>
+    <div class="ch-row">
+      <span class="ch-lbl">B</span>
+      <div class="ch-track"><div class="ch-fill b" id="fill-b"></div></div>
+      <span class="ch-num" id="num-b">–</span>
+    </div>
+    <div class="ch-row">
+      <span class="ch-lbl" style="font-size:10px;color:#a1a1aa">☀</span>
+      <div class="ch-track"><div class="ch-fill w" id="fill-w"></div></div>
+      <span class="ch-num" id="num-w">–</span>
+    </div>
+  </div>
+
+  <!-- Values grid -->
+  <div class="vals-grid">
+    <div class="val-cell">
+      <div class="vc-label">Bright</div>
+      <div class="vc-num accent" id="vc-bright">–</div>
+    </div>
+    <div class="val-cell">
+      <div class="vc-label">Hue</div>
+      <div class="vc-num" id="vc-hue">–</div>
+    </div>
+    <div class="val-cell">
+      <div class="vc-label">Sat</div>
+      <div class="vc-num" id="vc-sat">–</div>
+    </div>
+  </div>
+
+  <!-- History strip -->
+  <div class="history" id="history">
+    <span class="hist-empty" id="hist-empty">click anywhere to pin a color</span>
+  </div>
+
+  <!-- Status bar -->
+  <div class="statusbar">
+    <span class="hsl-text" id="hsl-text">hsl(–, –, –)</span>
+    <div class="status-dot" id="status-dot"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+(async () => {
+  const zoomCanvas  = document.getElementById('zoom-canvas');
+  const zoomCtx     = zoomCanvas.getContext('2d');
+  const initOverlay = document.getElementById('init-overlay');
+  const swatch      = document.getElementById('color-swatch');
+
+  // Backing canvas for the video stream (zoom view only)
+  const capCanvas = document.createElement('canvas');
+  const capCtx    = capCanvas.getContext('2d', { willReadFrequently: false });
+
+  let cursorX = 0, cursorY = 0;
+  let displayBounds = { x: 0, y: 0, width: screen.width, height: screen.height };
+  let currentHex    = '#000000';
+  let pinnedColors  = [];
+  let running       = false;
+  let followMode    = true;
+
+  // ── Color updates: cursor-free desktopCapturer path (main process) ─────────
+  // These come at ~12fps but are guaranteed to never include the cursor sprite.
+  window.api.onColorUpdate(({ r, g, b }) => {
+    updateDisplay(r, g, b);
+    initOverlay.style.display = 'none';
+  });
+
+  // ── Cursor position: used only for zoom view centering ─────────────────────
+  window.api.onCursorPos(({ x, y, bounds }) => {
+    cursorX = x; cursorY = y;
+    if (bounds) displayBounds = bounds;
+    document.getElementById('coords-label').textContent = `${x}, ${y}`;
+  });
+
+  // ── Ctrl / follow state ─────────────────────────────────────────────────────
+  const btnFollow = document.getElementById('btn-follow');
+  window.api.onCtrlState(held => btnFollow.classList.toggle('pinned-momentary', held));
+  window.api.onFollowState(val => { followMode = val; btnFollow.classList.toggle('active', val); });
+
+  // ── Buttons ─────────────────────────────────────────────────────────────────
+  document.getElementById('btn-close').addEventListener('click', () => window.api.quit());
+  btnFollow.addEventListener('click', () => {
+    followMode = !followMode;
+    btnFollow.classList.toggle('active', followMode);
+    window.api.setFollowing(followMode);
+  });
+  swatch.addEventListener('click', () => { window.api.copyText(currentHex); showToast('Copied ' + currentHex.toUpperCase()); });
+  zoomCanvas.addEventListener('click', () => { pinColor(currentHex); showToast('Pinned ' + currentHex.toUpperCase()); });
+
+  // ── Zoom view: getDisplayMedia at 60fps (GPU path, fast & smooth) ───────────
+  // The cursor MAY appear in this view — that's cosmetic only.
+  // All colour values come from the cursor-free desktopCapturer path above.
+  async function initZoom() {
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { cursor: 'never', frameRate: 60 },
+        audio: false,
+      });
+      const video = document.createElement('video');
+      video.srcObject = stream;
+      video.muted = true;
+      await video.play();
+      await new Promise(res => { if (video.readyState >= 2) res(); else video.addEventListener('loadeddata', res, { once: true }); });
+
+      capCanvas.width  = video.videoWidth;
+      capCanvas.height = video.videoHeight;
+      running = true;
+
+      function loop() {
+        if (!running) return;
+        requestAnimationFrame(loop);
+        if (video.readyState < 2) return;
+        capCtx.drawImage(video, 0, 0, capCanvas.width, capCanvas.height);
+
+        // Map logical cursor → capture coords
+        const scaleX = capCanvas.width  / displayBounds.width;
+        const scaleY = capCanvas.height / displayBounds.height;
+        const cx = Math.max(0, Math.min(Math.round((cursorX - displayBounds.x) * scaleX), capCanvas.width  - 1));
+        const cy = Math.max(0, Math.min(Math.round((cursorY - displayBounds.y) * scaleY), capCanvas.height - 1));
+        drawZoom(cx, cy);
+      }
+      loop();
+    } catch (err) {
+      // Zoom init failed — color updates still work via desktopCapturer path
+      const zc = document.getElementById('zoom-canvas');
+      zoomCtx.fillStyle = '#111';
+      zoomCtx.fillRect(0, 0, zc.width, zc.height);
+      zoomCtx.fillStyle = '#52525b';
+      zoomCtx.font = '10px monospace';
+      zoomCtx.textAlign = 'center';
+      zoomCtx.fillText('zoom unavailable', zc.width/2, zc.height/2);
+    }
+  }
+
+  // ── Display updaters ─────────────────────────────────────────────────────────
+  function updateDisplay(r, g, b) {
+    const hex = '#' + [r,g,b].map(v => v.toString(16).padStart(2,'0')).join('');
+    currentHex = hex;
+    swatch.style.background = hex;
+    document.getElementById('hex-val').textContent = hex.slice(1).toUpperCase();
+
+    const bright = Math.round((0.299*r + 0.587*g + 0.114*b) / 255 * 100);
+    const [h, s, l] = rgbToHsl(r, g, b);
+
+    document.getElementById('num-r').textContent = r;
+    document.getElementById('num-g').textContent = g;
+    document.getElementById('num-b').textContent = b;
+    document.getElementById('num-w').textContent = Math.round(bright * 2.55);
+    document.getElementById('fill-r').style.width = (r/255*100)+'%';
+    document.getElementById('fill-g').style.width = (g/255*100)+'%';
+    document.getElementById('fill-b').style.width = (b/255*100)+'%';
+    document.getElementById('fill-w').style.width = bright+'%';
+    document.getElementById('vc-bright').textContent = bright+'%';
+    document.getElementById('vc-hue').textContent    = Math.round(h)+'°';
+    document.getElementById('vc-sat').textContent    = Math.round(s)+'%';
+    document.getElementById('hsl-text').textContent  = `hsl(${Math.round(h)}, ${Math.round(s)}%, ${Math.round(l)}%)`;
+  }
+
+  function drawZoom(cx, cy) {
+    const zw = zoomCanvas.width, zh = zoomCanvas.height;
+    const zoom = 10;
+    const rw = Math.round(zw / zoom), rh = Math.round(zh / zoom);
+    const sx = Math.max(0, Math.min(cx - Math.floor(rw/2), capCanvas.width  - rw));
+    const sy = Math.max(0, Math.min(cy - Math.floor(rh/2), capCanvas.height - rh));
+
+    zoomCtx.imageSmoothingEnabled = false;
+    zoomCtx.fillStyle = '#000';
+    zoomCtx.fillRect(0, 0, zw, zh);
+    zoomCtx.drawImage(capCanvas, sx, sy, rw, rh, 0, 0, zw, zh);
+
+    // Pixel grid
+    const pxW = zw/rw, pxH = zh/rh;
+    zoomCtx.strokeStyle = 'rgba(0,0,0,0.2)';
+    zoomCtx.lineWidth = 0.5;
+    for (let x = 0; x <= zw; x += pxW) { zoomCtx.beginPath(); zoomCtx.moveTo(x,0); zoomCtx.lineTo(x,zh); zoomCtx.stroke(); }
+    for (let y = 0; y <= zh; y += pxH) { zoomCtx.beginPath(); zoomCtx.moveTo(0,y); zoomCtx.lineTo(zw,y); zoomCtx.stroke(); }
+
+    // Crosshair at exact cursor centre
+    const mid = { x: zw/2, y: zh/2 };
+    zoomCtx.strokeStyle = 'rgba(0,212,200,0.8)';
+    zoomCtx.lineWidth = 1;
+    zoomCtx.beginPath(); zoomCtx.moveTo(mid.x, 0);    zoomCtx.lineTo(mid.x, zh);   zoomCtx.stroke();
+    zoomCtx.beginPath(); zoomCtx.moveTo(0, mid.y);    zoomCtx.lineTo(zw,   mid.y); zoomCtx.stroke();
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+  function rgbToHsl(r, g, b) {
+    r/=255; g/=255; b/=255;
+    const max=Math.max(r,g,b), min=Math.min(r,g,b);
+    let h, s, l=(max+min)/2;
+    if (max===min) { h=s=0; } else {
+      const d=max-min;
+      s = l>0.5 ? d/(2-max-min) : d/(max+min);
+      switch(max) {
+        case r: h=((g-b)/d+(g<b?6:0))/6; break;
+        case g: h=((b-r)/d+2)/6; break;
+        case b: h=((r-g)/d+4)/6; break;
+      }
+    }
+    return [h*360, s*100, l*100];
+  }
+
+  function pinColor(hex) {
+    if (pinnedColors[0]===hex) return;
+    pinnedColors.unshift(hex);
+    if (pinnedColors.length>14) pinnedColors.pop();
+    renderHistory();
+  }
+
+  function renderHistory() {
+    const strip = document.getElementById('history');
+    strip.innerHTML = '';
+    if (!pinnedColors.length) {
+      const e = document.createElement('span'); e.className='hist-empty'; e.textContent='click zoom to pin a colour';
+      strip.appendChild(e); return;
+    }
+    pinnedColors.forEach(hex => {
+      const chip = document.createElement('div');
+      chip.className='hist-chip'; chip.style.background=hex;
+      chip.title=hex.toUpperCase()+' — click to copy';
+      chip.addEventListener('click', () => { window.api.copyText(hex); showToast('Copied '+hex.toUpperCase()); });
+      strip.appendChild(chip);
+    });
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent=msg; t.classList.add('show');
+    clearTimeout(window._toastTimer);
+    window._toastTimer = setTimeout(() => t.classList.remove('show'), 1600);
+  }
+
+  await initZoom();
+})();
+</script>
+</body>
+</html>
